@@ -112,12 +112,22 @@
             }"
             class="bg-white overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
           >
-            <div class="px-4 py-5 sm:p-6 text-center">
+            <div
+              :class="{
+                'bg-red-100':
+                  t.price === 'INVALID_SUB' || t.price === undefined,
+              }"
+              class="px-4 py-5 sm:p-6 text-center"
+            >
               <dt class="text-sm font-medium text-gray-500 truncate">
                 {{ t.name }} - USD
               </dt>
               <dd class="mt-1 text-3xl font-semibold text-gray-900">
-                {{ formatPrice(t.price) }}
+                {{
+                  t.price === 'INVALID_SUB' || t.price === undefined
+                    ? '-'
+                    : formatPrice(t.price)
+                }}
               </dd>
             </div>
             <div class="w-full border-t border-gray-200"></div>
@@ -143,11 +153,14 @@
         </dl>
         <hr class="w-full border-t border-gray-600 my-4" />
       </template>
-      <section class="relative" v-if="selectedTicker">
+      <section v-if="selectedTicker" class="relative">
         <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">
           {{ selectedTicker.name }} - USD
         </h3>
-        <div class="flex items-end border-gray-600 border-b border-l h-64">
+        <div
+          class="flex items-end border-gray-600 border-b border-l h-64"
+          ref="graph"
+        >
           <div
             v-for="(bar, idx) in normalizedGraph"
             :key="idx"
@@ -155,10 +168,9 @@
             class="bg-purple-800 border w-10"
           ></div>
         </div>
-
         <button
-          type="button"
           @click="selectedTicker = null"
+          type="button"
           class="absolute top-0 right-0"
         >
           <svg
@@ -205,6 +217,7 @@ export default {
       tickerAdded: false,
       page: 1,
       filter: '',
+      maxGraphElements: 1,
     };
   },
 
@@ -226,9 +239,16 @@ export default {
       this.tickers = JSON.parse(tickersData);
       this.tickers.forEach((ticker) => {
         subscribeToTickers(ticker.name, (newPrice) => {
+          if (!newPrice) {
+            console.log(newPrice);
+            // subscribeToTickers(ticker.name, 'BTC', (newPrice) => {
+            //   console.log(newPrice);
+            //   return;
+            // });
+          }
           return this.updateTicker(ticker.name, newPrice);
         });
-        console.log(this.tickers);
+        // console.log(this.tickers);
       });
     }
     setInterval(this.updateTickers, 5000);
@@ -238,6 +258,14 @@ export default {
     );
     const data = await response.json();
     this.coins = Object.keys(data.Data);
+  },
+
+  mounted() {
+    window.addEventListener('resize', this.calculateMaxGraphElements);
+  },
+
+  beforeUnmount() {
+    window.removeEventListener('resize', this.calculateMaxGraphElements);
   },
 
   computed: {
@@ -283,19 +311,30 @@ export default {
   },
 
   methods: {
+    calculateMaxGraphElements() {
+      if (!this.$refs.graph) {
+        return;
+      }
+
+      this.maxGraphElements = this.$refs.graph.clientWidth / 38;
+    },
+
     updateTicker(tickerName, price) {
       this.tickers
         .filter((t) => t.name === tickerName)
         .forEach((t) => {
           if (t === this.selectedTicker) {
             this.graph.push(price);
+            if (this.graph.length > this.maxGrathElements) {
+              this.graph.shift();
+            }
           }
           t.price = price;
         });
     },
 
     formatPrice(price) {
-      if (price === '-') {
+      if (price === '-' || price === 'INVALID_SUB' || price === undefined) {
         return price;
       }
       return price > 1 ? price.toFixed(2) : price.toPrecision(2);
@@ -359,8 +398,10 @@ export default {
   },
 
   watch: {
-    selectedTicker() {
+    async selectedTicker() {
       this.graph = [];
+      await this.$nextTick();
+      this.calculateMaxGraphElements();
     },
 
     tickers() {

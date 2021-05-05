@@ -3,22 +3,49 @@ const API_KEY =
 
 const AGGREGATE_INDEX = '5';
 
+let valute = 'USD';
+
 const tickersHandlers = new Map(); // {}
+const valuteHandlers = new Map();
 
 const socket = new WebSocket(
   `wss://streamer.cryptocompare.com/v2?api_key=${API_KEY}`
 );
 
 socket.addEventListener('message', (e) => {
-  const { TYPE: type, FROMSYMBOL: currency, PRICE: newPrice } = JSON.parse(
-    e.data
-  );
+  let {
+    TYPE: type,
+    FROMSYMBOL: currency,
+    PRICE: newPrice,
+    PARAMETER: param,
+    MESSAGE: message,
+  } = JSON.parse(e.data);
+
+  if (message === 'INVALID_SUB') {
+    const p = param.split('~')[2];
+    const handlers = tickersHandlers.get(p) ?? [];
+
+    valute = 'BTC';
+
+    valuteHandlers.set(p, 'BTC');
+
+    handlers.forEach((fn) => {
+      fn(newPrice, message);
+    });
+  }
   if (type !== AGGREGATE_INDEX || newPrice === undefined) {
     return;
+  } else {
+    const handlers = tickersHandlers.get(currency) ?? [];
+    valute = 'USD';
+    valuteHandlers.set(currency, 'USD');
+
+    handlers.forEach((fn) => {
+      fn(newPrice);
+    });
   }
-  const handlers = tickersHandlers.get(currency) ?? [];
-  handlers.forEach((fn) => fn(newPrice));
 });
+
 //TODO: refactor to use URLSearchParams
 
 const sendToWsMessage = (message) => {
@@ -36,32 +63,42 @@ const sendToWsMessage = (message) => {
   );
 };
 
-const subscribeT0TickerOnWs = (ticker) => {
+const subscribeT0TickerOnWs = (ticker, valute) => {
   sendToWsMessage({
     action: 'SubAdd',
-    subs: [`5~CCCAGG~${ticker}~USD`],
+    subs: [`5~CCCAGG~${ticker}~${valute}`],
   });
 };
 
-const unSubscribeT0TickerOnWs = (ticker) => {
+const unSubscribeT0TickerOnWs = (ticker, valute) => {
   sendToWsMessage({
     action: 'SubRemove',
-    subs: [`5~CCCAGG~${ticker}~USD`],
+    subs: [`5~CCCAGG~${ticker}~${valute}`],
   });
 };
 
 export const subscribeToTickers = (ticker, cb) => {
   const subscribers = tickersHandlers.get(ticker) || [];
+  valuteHandlers.set(ticker, valute);
   tickersHandlers.set(ticker, [...subscribers, cb]);
-  subscribeT0TickerOnWs(ticker);
+  //
+  console.log(valuteHandlers);
+  let currentVal = valuteHandlers.get(ticker);
+  console.log(currentVal);
+
+  if (currentVal === 'BTC') {
+    subscribeT0TickerOnWs(ticker, 'BTC');
+  }
+  subscribeT0TickerOnWs(ticker, currentVal);
 };
 
 export const unsubscribeFromTickers = (ticker) => {
   tickersHandlers.delete(ticker);
-  unSubscribeT0TickerOnWs(ticker);
+  unSubscribeT0TickerOnWs(ticker, valute);
 };
 
 window.tickers = tickersHandlers;
+window.val = valuteHandlers;
 
 // получить стоимость криптовалютных пар с АПИшки?
 // получать ОБНОВЛЕНИЯ стоимости криптовалютных пар с АПИШки
