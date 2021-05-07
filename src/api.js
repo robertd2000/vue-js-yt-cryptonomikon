@@ -82,9 +82,9 @@ export const subscribeToTickers = (ticker, cb) => {
   valuteHandlers.set(ticker, valute);
   tickersHandlers.set(ticker, [...subscribers, cb]);
   //
-  console.log(valuteHandlers);
+  // console.log(valuteHandlers);
   let currentVal = valuteHandlers.get(ticker);
-  console.log(currentVal);
+  // console.log(currentVal);
 
   if (currentVal === 'BTC') {
     subscribeT0TickerOnWs(ticker, 'BTC');
